@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>THVL 人工标注台</title>
+<link rel="stylesheet" href="annotate.css">
+</head>
+<body>
+<header>
+  <h1>THVL 人工标注台</h1>
+  <button class="who" id="whoBadge" title="切换标注工作区">?</button>
+  <span id="workspaceHint" class="hint">独立标注工作区</span>
+  <div id="progressWrap">
+    <div id="progressBar"><i></i></div>
+    <div id="progressText">加载中…</div>
+  </div>
+  <span id="saveState"></span>
+  <span style="flex:1"></span>
+  <button id="btnRef">标签速查</button>
+  <button id="btnKeys">快捷键</button>
+  <button id="btnBackup">备份本视频</button>
+</header>
+
+<div id="layout">
+  <aside id="sidebar">
+    <div id="sideTools">
+      <label for="search" class="sideHeading">视频任务 <span id="listCount"></span></label>
+      <input id="search" type="search" placeholder="搜索视频编号…">
+      <div class="filterRow">
+        <button data-f="all" class="on">全部</button>
+        <button data-f="todo">未完成</button>
+        <button data-f="done">已完成</button>
+        <button data-f="needs_expert">待复核</button>
+        <button data-f="no_risk">无风险</button>
+      </div>
+    </div>
+    <div id="videoList"></div>
+  </aside>
+
+  <section id="work">
+    <div id="workspace">
+      <div id="mediaColumn">
+      <div class="videoHeading"><div><span class="eyebrow">当前视频</span><h2 id="currentVideo">正在加载任务…</h2></div>
+        <div class="taskNav"><button id="prevVideo" aria-label="上一个视频">← 上一个</button><button id="nextVideo" aria-label="下一个视频">下一个 →</button></div></div>
+      <div id="playerSurface">
+      <video id="video" controls playsinline preload="metadata" aria-label="标注视频播放器"></video>
+      </div>
+      <div id="machineState" class="hint" role="status"></div>
+      <div id="transport" aria-label="视频播放控制">
+        <div class="transportRow">
+          <button id="playPause" class="primary" title="播放或暂停（空格）" disabled>▶ 播放</button>
+          <div class="seekButtons" aria-label="前后定位">
+            <button data-seek="-5" title="后退 5 秒（Shift + ←）" disabled>−5s</button>
+            <button data-seek="-1" title="后退 1 秒（←）" disabled>−1s</button>
+            <button data-seek="1" title="前进 1 秒（→）" disabled>+1s</button>
+            <button data-seek="5" title="前进 5 秒（Shift + →）" disabled>+5s</button>
+          </div>
+          <span class="time"><b id="tCur">00:00.0</b> / <span id="tDur">00:00.0</span></span>
+        </div>
+        <div class="transportRow speedRow"><span class="controlLabel">播放速度</span>
+          <div id="speedPresets" role="group" aria-label="播放速度">
+            <button data-rate="0.5" aria-pressed="false">0.5×</button><button data-rate="0.75" aria-pressed="false">0.75×</button>
+            <button data-rate="1" aria-pressed="true">1×</button><button data-rate="1.25" aria-pressed="false">1.25×</button>
+            <button data-rate="1.5" aria-pressed="false">1.5×</button><button data-rate="2" aria-pressed="false">2×</button><button data-rate="3" aria-pressed="false">3×</button>
+          </div><span id="rateHint" class="hint">原速</span>
+        </div>
+        <div id="playbackNotice" class="hint" role="status" aria-live="polite"></div>
+      </div>
+      <div class="timelineToolbar"><div><span class="controlLabel">事件时间轴</span> <span id="segmentCount" class="badge">0 段</span></div>
+        <div class="zoomButtons"><button id="zoomOut" aria-label="缩小时间轴">−</button><span id="zoomLabel" class="hint">全片</span>
+          <button id="zoomIn" aria-label="放大时间轴">+</button><button id="zoomAll">全片</button></div></div>
+      <div id="tlWrap">
+        <div id="ruler"></div>
+        <div id="lanes"><div id="playhead"></div></div>
+      </div>
+
+      <details class="panel" id="machinePanel" open>
+        <summary><strong>机器预标注建议</strong> <span id="machineCount" class="badge src">0 段</span></summary>
+        <p class="hint">以下是原始机器建议，供核对；右侧是你的标注。点击建议定位画面，修改人工结果不会覆盖这里的原始建议。</p>
+        <div id="machineSuggestions"></div>
+        <button id="jumpReview" class="reviewJump">查看机器待检查区间</button>
+      </details>
+      <p class="hint playerHint">空格 播放 / 暂停 · ← → 定位 · − / = 调速 · , / . 微调 0.1 秒</p>
+      <div class="panel">
+        <h3>转写文本（点击跳转；仅机器 ASR 结果，可能有识别错误）
+          <button id="btnToggleTr" style="float:right">显示/隐藏</button></h3>
+        <p id="transcriptCoverage" class="hint"></p><div id="transcript"></div>
+      </div>
+
+      </div>
+      <div id="detailColumn">
+      <div class="detailHeading"><div><span class="eyebrow">标注与复核</span><h2>事件片段</h2></div><button id="btnNewSeg" class="primary">＋ 新建片段 <kbd>N</kbd></button></div>
+      <div id="editorEmpty" class="emptyState">选择时间轴或列表中的片段进行编辑，也可以在播放头新建片段。</div>
+      <div class="panel" id="editor">
+        <h3>段落编辑 <span id="edOrigin" class="badge src"></span> <span id="edWarn"></span></h3>
+        <div class="boundaryRow">
+          <label for="edStart">起点（秒）<input type="number" id="edStart" step="0.1" min="0"></label>
+          <span class="nudge"><button data-n="st,-1">−1s</button><button data-n="st,-0.1">−0.1</button><button data-n="st,0.1">+0.1</button><button data-n="st,1">+1s</button></span>
+          <button id="btnSetStart" title="把起点设为播放头（[）">取播放头 [</button>
+        </div>
+        <div class="boundaryRow">
+          <label for="edEnd">终点（秒）<input type="number" id="edEnd" step="0.1" min="0"></label>
+          <span class="nudge"><button data-n="en,-1">−1s</button><button data-n="en,-0.1">−0.1</button><button data-n="en,0.1">+0.1</button><button data-n="en,1">+1s</button></span>
+          <button id="btnSetEnd" title="把终点设为播放头（]）">取播放头 ]</button>
+        </div>
+        <div class="row segmentActions">
+          <button id="btnPlaySeg">▶ 播放本段</button><button id="btnLoopSeg" aria-pressed="false">↻ 循环本段</button><button id="btnDelSeg" class="danger">删除 [Del]</button>
+        </div>
+        <div class="row"><span>标签（可多选）：</span><div class="labelGrid" id="edLabels"></div></div>
+        <div class="row">
+          <span>证据模态：</span>
+          <label class="ck"><input type="checkbox" id="modVisual"> 视频</label>
+          <label class="ck"><input type="checkbox" id="modTextual"> 语音/字幕语义</label>
+          <label class="ck"><input type="checkbox" id="modAuditory"> 环境音</label>
+          <label class="ck"><input type="checkbox" id="edReview"> 待复核（证据不足，交专家）</label>
+        </div>
+        <div class="row">
+          <label for="edRationale">理由</label><input type="text" id="edRationale" placeholder="一句话：看到了什么/听到了什么（可引用原话）">
+        </div>
+        <div class="row"><label for="edVerification">核验材料</label><input type="text" id="edVerification" placeholder="事实核查来源、授权或目的核验说明；专家确认 F1 时必填"></div>
+      </div>
+
+      <div class="panel">
+        <h3>片段列表 <span class="hint">点击定位并编辑</span></h3>
+        <table class="seglist"><thead>
+          <tr><th>#</th><th>起</th><th>止</th><th>标签</th><th>来源</th><th>标记</th></tr>
+        </thead><tbody id="segRows"></tbody></table>
+      </div>
+
+      <div class="panel" id="vlevel">
+        <h3>视频级结论</h3>
+        <div class="row">
+          <label class="ck"><input type="radio" name="vstatus" value="in_progress"> 进行中</label>
+          <label class="ck"><input type="radio" name="vstatus" value="done"> 已完成</label>
+          <label class="ck"><input type="radio" name="vstatus" value="no_risk"> 确认无风险内容</label>
+          <label class="ck"><input type="radio" name="vstatus" value="needs_expert"> 需专家复核</label>
+        </div>
+        <input type="text" id="vnote" placeholder="视频级备注（可选）：如缺音轨、画面损坏、疑难情况…">
+        <label class="ck"><input type="checkbox" id="wholeVideo"> 我已完整查看本视频并检查机器漏报</label>
+        <div class="hint" id="vCheck"></div>
+      </div>
+      <div class="panel" id="reviewPanel"><h3>机器待检查区间（含否决、失败和预算遗漏）</h3><div id="reviewQueue"></div></div>
+      <details class="panel"><summary>旧版标注与任务来源（仅作历史参照）</summary><pre id="taskProvenance" style="white-space:pre-wrap;word-break:break-all"></pre></details>
+      <div class="panel" id="expertPanel" style="display:none">
+        <h3>专家核验：两份独立人工结果</h3><div id="expertSources"></div>
+        <label>裁决说明 <input type="text" id="adjudicationNote" style="width:100%" placeholder="说明采用、修改或否决的依据；完成核验时必填"></label>
+      </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal" id="modalRef"><div class="box">
+  <button class="close" data-close aria-label="关闭弹窗">✕</button>
+  <h2>14 标签速查（完整规范见 instructions.md）</h2>
+  <div id="refBody"></div>
+</div></div>
+
+<div class="modal" id="modalKeys"><div class="box">
+  <button class="close" data-close aria-label="关闭弹窗">✕</button>
+  <h2>快捷键</h2>
+  <p><kbd>空格</kbd> 播放/暂停　<kbd>←</kbd><kbd>→</kbd> ±1 秒（<kbd>Shift</kbd> ±5 秒）　<kbd>,</kbd><kbd>.</kbd> ±0.1 秒</p>
+  <p><kbd>−</kbd> 降低倍速　<kbd>=</kbd> 提高倍速　<kbd>Esc</kbd> 退出片段循环或关闭弹窗</p>
+  <kbd>[</kbd> 把选中段起点设为播放头　<kbd>]</kbd> 把终点设为播放头<br>
+  <kbd>N</kbd> 在播放头新建段落　<kbd>Del</kbd> 删除选中段　<kbd>Ctrl/⌘+S</kbd> 立即保存<br>
+  滚轮（时间轴上）＝前后 2 秒；<kbd>Ctrl</kbd>+滚轮＝缩放时间轴
+  <p class="hint">输入框聚焦时除 Ctrl+S 外快捷键不生效。</p>
+</div></div>
+
+<script src="autosave.js"></script>
+<script src="player.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

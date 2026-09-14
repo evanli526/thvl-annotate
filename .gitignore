@@ -1,0 +1,10 @@
+.annotation-work/
+__pycache__/
+*.py[cod]
+.venv/
+.env
+*.log
+*.mp4
+*.mov
+*.mkv
+*.webm
