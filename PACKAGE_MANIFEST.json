@@ -2,9 +2,9 @@
   "files": {
     ".gitignore": "1c669511cf03f882eeb19291669936e4d777d4be8fe7a245c8b6074adf2c2c90",
     "README.md": "693c00db68a37624d60541320389f3952122ff26eeab5144a35755e79ee356a4",
-    "annotate/annotate.css": "855b18dfd4272e8e353fece36398d3b6d5d1bf0b5a4c2a9ef9fece91859c4cae",
-    "annotate/annotate.html": "609bfac7ce002bc21cc6eb92d015510b6a83d33b438df0131f1b51880dd33d5d",
-    "annotate/app.js": "c1783275c5664cf5abefe9687d65995ae31faf72f35fa19b341ec250df12480c",
+    "annotate/annotate.css": "87a94ebef592938576755c25b9243eaecf96b1520bdddf8e05e799d0b9d1752e",
+    "annotate/annotate.html": "22bce6833d20eecfe3fcd8aaa080aee22a28070f6e84bc7b719b4037f8ed8b67",
+    "annotate/app.js": "fdb9e2aad492e4b240ae3307846b46a31f0b25b908a3e4dc5579ccdf0b4f8bc8",
     "annotate/autosave.js": "cd3d21ae036018718b9db5f48a0bb2d9e584035ecf366c32e96932ffe3e80178",
     "annotate/common.py": "087344d322f0e072c55b463d70a60b9666051a97d35bf4d5729126ceed74ab29",
     "annotate/contracts.py": "ba65e9dd23651c352a57b719f68ed653711ea824b84c656e9bc8ed2f7846fad0",

@@ -20,22 +20,7 @@ const LABELS = [
 const LABEL_NAME = Object.fromEntries(LABELS);
 const LABEL_COLOR = {};
 for (const [c] of LABELS) LABEL_COLOR[c] = DOMAINS[c[0]].color;
-const REF_BRIEF = {
-  A1:"对他人/动物的身体攻击、虐待或持械即时威胁；意外→A3，自伤→A2，口头恐吓→C1/C2。",
-  A2:"片内证据明确的自我施伤/自杀尝试、准备或方法演示；不凭情绪/疤痕推断；目的不清不保留该标签。",
-  A3:"有具体危险源+失控机制的危险操作或事故；『看起来刺激』不算；已构成A1/A2不再加。",
-  A4:"开放性重创、组织暴露、断肢、大量血液（含真实手术/解剖）；轻伤、示意图、食材不算。",
-  B1:"明确性行为/模拟、性部位性化展示、露骨台词；普通接吻拥抱、生理教育不算。",
-  B2:"非自愿性接触、强迫、性羞辱、遭拒后持续要求；自愿→B1；年龄依据须可核验。",
-  C1:"对可识别对象的辱骂、贬损、羞辱、恐吓（非身份依据）；无对象脏话、普通争吵不算。",
-  C2:"以种族/宗教/性别/地域等身份为依据的贬损、排斥或煽动；仅提到身份不算。",
-  D1:"非医疗用药、处方药滥用、危险吸入/饮酒及鼓励演示；普通烟酒、既往回顾不算。",
-  D2:"有财物输赢的下注或招揽赌博；无输赢棋牌、游戏、中性报道不算。",
-  E1:"未授权取走/抢夺/胁迫索取或破坏财物；受骗交付→E2；追捕画面本身不算。",
-  E2:"虚假身份/虚构交易/伪造凭证骗取财产利益；普通说谎、魔术不算。",
-  F1:"可核验主张+当真传播+已证伪+具体危害，四者齐备；机器判断不能代替事实核查。",
-  F2:"未授权披露敏感私人信息或侵入私密空间；公开信息、普通出镜不算；授权依据不足不保留该标签。",
-};
+
 
 /* ---------------- 全局状态 ---------------- */
 const $ = id => document.getElementById(id);
@@ -679,13 +664,41 @@ $("btnBackup").onclick = () => {
   a.download = `${ANNOTATOR}_${cur.task.video_id}.json`;
   a.click();
 };
-$("btnRef").onclick = () => {
-  $("refBody").innerHTML = Object.entries(DOMAINS).map(([d, info]) =>
-    `<h3 style="color:${info.color}">${d} ${info.name}</h3>` +
-    LABELS.filter(([c]) => c[0] === d).map(([c, n]) =>
-      `<p><span class="lchip" style="background:${info.color}">${c}</span> <b>${n}</b>：${REF_BRIEF[c]}</p>`).join("")
-  ).join("");
-  $("modalRef").style.display = "block";
+// Read the reference directly from the guideline, so definitions cannot drift.
+function renderLabelReference(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const start = lines.findIndex(line => /^##\s+三[、.．]/.test(line));
+  if (start < 0) throw new Error('未找到标注规范第三部分');
+  let end = lines.findIndex((line, i) => i > start && /^##\s/.test(line));
+  if (end < 0) end = lines.length;
+  const inline = text => escapeHtml(text).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\*([^*]+)\*/g, '<em>$1</em>');
+  const html = []; let card = false;
+  for (const line of lines.slice(start + 1, end)) {
+    const text = line.trim();
+    if (!text || /^---+$/.test(text)) continue;
+    if (/^###\s/.test(text)) {
+      if (card) { html.push('</article>'); card = false; }
+      html.push('<h3>' + inline(text.replace(/^###\s+/, '')) + '</h3>');
+    } else if (/^\* \*\*[A-F]\d/.test(line)) {
+      if (card) html.push('</article>');
+      html.push('<article class="referenceLabel"><p>' + inline(text.replace(/^\*\s+/, '')) + '</p>'); card = true;
+    } else {
+      html.push('<p class="referenceBoundary">' + inline(text.replace(/^\*\s+/, '')) + '</p>');
+    }
+  }
+  if (card) html.push('</article>');
+  return html.join('');
+}
+$('btnRef').onclick = async () => {
+  $('modalRef').style.display = 'block';
+  $('refBody').textContent = '正在加载标注规范第三部分…';
+  try {
+    const response = await fetch('instructions.md', {cache:'no-store'});
+    if (!response.ok) throw new Error('读取规范失败：HTTP ' + response.status);
+    $('refBody').innerHTML = renderLabelReference(await response.text());
+  } catch (error) {
+    $('refBody').textContent = error.message + '。请检查服务，或打开仓库内 annotate/instructions.md 第三部分。';
+  }
 };
 $("btnKeys").onclick = () => $("modalKeys").style.display = "block";
 document.querySelectorAll("[data-close]").forEach(el => el.onclick =

@@ -92,3 +92,10 @@ h1{font-size:15px;margin:0;white-space:nowrap}h2{font-size:14px;margin:0;overflo
 @media(min-width:1650px){#sidebar{width:148px}#workspace{grid-template-columns:minmax(600px,1fr) 420px}#humanFields{padding:9px}.labelGrid button{font-size:12px;padding:4px}#edRationale{height:58px;min-height:58px;max-height:58px}#segmentPanel{flex-basis:165px}}
 @media(max-width:1200px){#sidebar{width:116px}#workspace{grid-template-columns:minmax(350px,1fr) 370px;gap:7px}header{gap:7px}#workspaceHint{display:none}}
 @media(max-height:740px){#segmentPanel{flex-basis:94px}#referenceDeck{flex-basis:150px}#referenceDeck.collapsed{flex-basis:36px}#tlWrap{height:56px}.labelGrid button{padding:2px 4px}#humanFields{padding:6px 8px}}
+
+#modalRef .box{max-width:940px;line-height:1.8}
+#refBody h3{font-size:15px;margin:20px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.referenceLabel{padding:11px 14px;margin:9px 0;background:var(--panel2);border:1px solid var(--line);border-radius:6px}
+.referenceLabel p{margin:0;font-size:13px;overflow-wrap:anywhere}
+.referenceLabel .referenceBoundary{margin-top:8px;color:#bfcedd}
+.referenceBoundary em{font-style:normal;font-weight:600;color:var(--accent)}
