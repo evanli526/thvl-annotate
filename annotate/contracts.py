@@ -17,6 +17,10 @@ def validate_record(record, task, expert=False):
     if record.get("task_version") != task["task_version"]:
         raise ValueError("task version changed; reload and reconcile annotations")
     status = record.get("status")
+    workflow = record.get("review_workflow", "legacy")
+    if workflow not in ("legacy", "segments_only"):
+        raise ValueError("unknown review workflow")
+    simplified = workflow == "segments_only"
     if status not in FINAL_STATUSES | {"in_progress"}:
         raise ValueError("invalid video status")
     complete = status in FINAL_STATUSES
@@ -46,9 +50,9 @@ def validate_record(record, task, expert=False):
             raise ValueError("needs_review must be boolean")
         if complete and not str(seg.get("rationale","")).strip():
             raise ValueError("completed segment needs a rationale")
-        if status in ("done", "no_risk") and seg.get("needs_review"):
-            raise ValueError("unresolved segments require needs_expert")
-        if expert and status == "done" and "F1" in seg["labels"] and not str(seg.get("verification_note","")).strip():
+        if (status in ("done", "no_risk") or (simplified and complete)) and seg.get("needs_review"):
+            raise ValueError("verify or remove unconfirmed segments before submitting" if simplified else "unresolved segments require needs_expert")
+        if not simplified and expert and status == "done" and "F1" in seg["labels"] and not str(seg.get("verification_note","")).strip():
             raise ValueError("F1 requires a fact-check source/explanation in verification_note")
     decisions = record.get("review_decisions", {})
     if not isinstance(decisions, dict):
@@ -61,9 +65,9 @@ def validate_record(record, task, expert=False):
             raise ValueError("confirm whole-video review before completing")
         if task.get("media_status") != "ok" and status != "needs_expert":
             raise ValueError("missing media cannot be declared reviewed or safe")
-        if review_ids-set(decisions):
+        if not simplified and review_ids-set(decisions):
             raise ValueError("all machine review items require a disposition")
-        if "unresolved" in decisions.values() and status != "needs_expert":
+        if not simplified and "unresolved" in decisions.values() and status != "needs_expert":
             raise ValueError("unresolved review items require needs_expert")
         if status == "no_risk" and segments:
             raise ValueError("no_risk cannot contain risk segments")

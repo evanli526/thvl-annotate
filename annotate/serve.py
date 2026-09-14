@@ -22,7 +22,7 @@ from common import media_identity, read_json, valid_id, write_json
 HERE = str(Path(__file__).resolve().parent)
 WRITE_LOCK = threading.Lock()
 PROXY_INDEX = None
-STATIC = {"annotate.html", "annotate.css", "app.js", "player.js", "autosave.js", "instructions.md", "开始标注.md", "tasks.json"}
+STATIC = {"annotate.html", "annotate.css", "app.js", "editor.js", "player.js", "autosave.js", "instructions.md", "开始标注.md", "tasks.json"}
 VIDEO_TYPES = {".mp4":"video/mp4", ".mov":"video/quicktime", ".webm":"video/webm"}
 
 

@@ -22,7 +22,7 @@ const LABEL_COLOR = {};
 for (const [c] of LABELS) LABEL_COLOR[c] = DOMAINS[c[0]].color;
 const REF_BRIEF = {
   A1:"对他人/动物的身体攻击、虐待或持械即时威胁；意外→A3，自伤→A2，口头恐吓→C1/C2。",
-  A2:"片内证据明确的自我施伤/自杀尝试、准备或方法演示；不凭情绪/疤痕推断；目的不清→待复核。",
+  A2:"片内证据明确的自我施伤/自杀尝试、准备或方法演示；不凭情绪/疤痕推断；目的不清不保留该标签。",
   A3:"有具体危险源+失控机制的危险操作或事故；『看起来刺激』不算；已构成A1/A2不再加。",
   A4:"开放性重创、组织暴露、断肢、大量血液（含真实手术/解剖）；轻伤、示意图、食材不算。",
   B1:"明确性行为/模拟、性部位性化展示、露骨台词；普通接吻拥抱、生理教育不算。",
@@ -33,8 +33,8 @@ const REF_BRIEF = {
   D2:"有财物输赢的下注或招揽赌博；无输赢棋牌、游戏、中性报道不算。",
   E1:"未授权取走/抢夺/胁迫索取或破坏财物；受骗交付→E2；追捕画面本身不算。",
   E2:"虚假身份/虚构交易/伪造凭证骗取财产利益；普通说谎、魔术不算。",
-  F1:"可核验主张+当真传播+已证伪+具体危害，四者齐备；机器不能核查，疑似一律待复核。",
-  F2:"未授权披露敏感私人信息或侵入私密空间；公开信息、普通出镜不算；授权不明→待复核。",
+  F1:"可核验主张+当真传播+已证伪+具体危害，四者齐备；机器判断不能代替事实核查。",
+  F2:"未授权披露敏感私人信息或侵入私密空间；公开信息、普通出镜不算；授权依据不足不保留该标签。",
 };
 
 /* ---------------- 全局状态 ---------------- */
@@ -99,8 +99,7 @@ const saver = new VersionedSaver({
   }
 });
 
-const fmt = s => { if (s == null || !Number.isFinite(s)) return '不可用'; s = Math.max(0, s); const m = Math.floor(s/60), r = s - 60*m;
-  return String(m).padStart(2,"0") + ":" + r.toFixed(1).padStart(4,"0"); };
+const fmt = s => AnnotationEditor.formatTime(s) || '不可用';
 
 /* ---------------- 启动 ---------------- */
 async function boot() {
@@ -112,7 +111,7 @@ async function boot() {
   EXPERT_ID = cfg.expert_id; isExpert = ANNOTATOR === EXPERT_ID;
   if (![...cfg.annotators, EXPERT_ID].includes(ANNOTATOR)) { setSaveState('未知标注者代号，请使用分配的链接', true); return; }
   $('workspaceHint').textContent = isExpert ? '专家裁决工作区' : '独立标注 · 仅保存到你的工作区';
-  $('expertPanel').style.display = isExpert ? 'block' : 'none';
+  $('expertTab').hidden = !isExpert; $('expertNote').hidden = !isExpert;
   const resp = await fetch("tasks.json");
   if (!resp.ok) { $("progressText").textContent = "缺少 tasks.json，请先运行 build_tasks.py"; return; }
   TASKS = await resp.json();
@@ -198,7 +197,7 @@ async function openVideo(vid) {
          source_signatures:context?.source_signatures || {}, adjudication_note:''};
   selId = null; dirty = false; setSaveState('');
   const srcSegs = saved && saved.segments ? saved.segments : task.segments;
-  cur.segments = structuredClone(srcSegs).map(s => ({...s, segment_id:s.segment_id || newSegmentId(), uid:uidSeq++, edited:!!s.edited}));
+  cur.segments = AnnotationEditor.draftSegments(srcSegs, !!saved).map(s => ({...s, segment_id:s.segment_id || newSegmentId(), uid:uidSeq++, edited:!!s.edited}));
   if (saved) {
     for (const key of ['status','note','review_decisions','whole_video_reviewed','adjudication_note']) {
       if (saved[key] != null) cur[key] = structuredClone(saved[key]);
@@ -215,7 +214,7 @@ async function openVideo(vid) {
   $('adjudicationNote').value = cur.adjudication_note;
   $('machineState').dataset.machineStatus=task.machine_status; $('machineState').dataset.mediaStatus=task.media_status;
   $('machineState').textContent = `媒体：${task.media_status === 'ok' ? '可用' : (MACHINE_STATUS_TEXT[task.media_status] || '不可用')}；机器处理：${MACHINE_STATUS_TEXT[task.machine_status] || '状态待核查'}。机器未报区间仍需全片检查。`;
-  $('taskProvenance').textContent = JSON.stringify({legacy:task.legacy, mapping:task.mapping, provenance:task.provenance}, null, 2);
+  selId = cur.segments[0]?.uid ?? null;
   player.reset(task.duration_s, task.media_status === 'ok');
   $('currentVideo').textContent = vid;
   $('prevVideo').disabled = TASKS.indexOf(task) === 0;
@@ -229,7 +228,7 @@ async function openVideo(vid) {
   $("zoomLabel").textContent = "全片";
   renderSegRows(); renderEditor(); drawTimeline();
   renderList();
-  renderReviewQueue(); renderMachineSuggestions(); renderExpert(context);
+  renderReviewQueue(); renderMachineSuggestions(); renderExpert(context); showReference(isExpert ? 'expertPanel' : 'machinePanel');
   loadTranscript(vid);
   loading = false;
   if (recovered) markDirty();
@@ -346,7 +345,7 @@ window.onpointermove = e => {
   } else {
     s.end_s = Math.min(cur.task.duration_s, Math.max(drag.en + dt, s.start_s + 0.1));
   }
-  s.edited = true; markDirty();
+  s.edited = true; s.needs_review = false; markDirty();
   drawTimeline(); fillEditor(s);
 };
 window.onpointerup = () => { if (drag) { drag = null; renderSegRows(); } };
@@ -399,7 +398,7 @@ function currentSeg() { return cur ? cur.segments.find(s => s.uid === selId) : n
 function renderEditor() {
   $("editorEmpty").hidden = !!currentSeg();
   const s = currentSeg();
-  $("editor").style.display = s ? "block" : "none";
+  $("editor").style.display = s ? "grid" : "none";
   if (!s) return;
   fillEditor(s);
   const grid = $("edLabels"); grid.innerHTML = "";
@@ -412,35 +411,48 @@ function renderEditor() {
       const i = s.labels.indexOf(code);
       i >= 0 ? s.labels.splice(i, 1) : s.labels.push(code);
       s.labels.sort((a, b2) => LABELS.findIndex(l => l[0] === a) - LABELS.findIndex(l => l[0] === b2));
-      s.edited = true; markDirty(); renderEditor(); drawTimeline(); renderSegRows();
+      s.edited = true; s.needs_review = false; markDirty(); renderEditor(); drawTimeline(); renderSegRows();
     };
     grid.appendChild(b);
   }
   $("modVisual").checked = s.modalities.includes("visual");
   $("modTextual").checked = s.modalities.includes("textual");
   $("modAuditory").checked = s.modalities.includes("auditory");
-  $("edReview").checked = !!s.needs_review;
   $("edRationale").value = s.rationale || "";
-  $('edVerification').value = s.verification_note || '';
   $("edOrigin").textContent = s.origin === "machine"
     ? `机器预标注${s.confidence != null ? " · 置信度 " + s.confidence : ""}` : "人工新建";
-  $("edWarn").textContent = s.needs_review ? '⚠ 待复核：' + (s.review_reasons || []).join('；') : '';
+  renderSelectedMachine(s);
 }
-function fillEditor(s) { $("edStart").value = s.start_s.toFixed(1); $("edEnd").value = s.end_s.toFixed(1); }
-$("edStart").onchange = e => { const s = currentSeg(); if (!s) return;
-  s.start_s = Math.max(0, Math.min(parseFloat(e.target.value) || 0, s.end_s - 0.1)); s.edited = true; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); };
-$("edEnd").onchange = e => { const s = currentSeg(); if (!s) return;
-  s.end_s = Math.min(cur.task.duration_s, Math.max(parseFloat(e.target.value) || 0, s.start_s + 0.1)); s.edited = true; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); };
+function fillEditor(s) {
+  $("edStart").value = fmt(s.start_s); $("edEnd").value = fmt(s.end_s);
+  for (const id of ['edStart','edEnd']) $(id).removeAttribute('aria-invalid');
+  $('edWarn').textContent = '';
+}
+function updateBoundary(input, key) {
+  const s = currentSeg(); if (!s) return;
+  const value = AnnotationEditor.parseTime(input.value);
+  const start = key === 'start_s' ? value : s.start_s;
+  const end = key === 'end_s' ? value : s.end_s;
+  if (value === null || start < 0 || !(start < end) || end > cur.task.duration_s) {
+    input.setAttribute('aria-invalid','true');
+    $('edWarn').textContent = '请输入分:秒（如 01:35.5），起点须早于终点且不超过视频时长。无效输入未保存。';
+    return;
+  }
+  s[key] = value; s.edited = true; s.needs_review = false;
+  markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); renderSelectedMachine(s);
+}
+$('edStart').onchange = e => updateBoundary(e.target, 'start_s');
+$('edEnd').onchange = e => updateBoundary(e.target, 'end_s');
 document.querySelectorAll(".nudge button").forEach(b => b.onclick = () => {
   const s = currentSeg(); if (!s) return;
   const [which, d] = b.dataset.n.split(",");
   const delta = parseFloat(d);
   if (which === "st") s.start_s = Math.max(0, Math.min(s.start_s + delta, s.end_s - 0.1));
   else s.end_s = Math.min(cur.task.duration_s, Math.max(s.end_s + delta, s.start_s + 0.1));
-  s.edited = true; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s);
+  s.edited = true; s.needs_review = false; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s);
 });
-$("btnSetStart").onclick = () => { const s = currentSeg(); if (s) { s.start_s = Math.min(V.currentTime, s.end_s - 0.1); s.edited = true; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); } };
-$("btnSetEnd").onclick = () => { const s = currentSeg(); if (s) { s.end_s = Math.max(V.currentTime, s.start_s + 0.1); s.edited = true; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); } };
+$("btnSetStart").onclick = () => { const s = currentSeg(); if (s) { s.start_s = Math.min(V.currentTime, s.end_s - 0.1); s.edited = true; s.needs_review = false; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); } };
+$("btnSetEnd").onclick = () => { const s = currentSeg(); if (s) { s.end_s = Math.max(V.currentTime, s.start_s + 0.1); s.edited = true; s.needs_review = false; markDirty(); drawTimeline(); renderSegRows(); fillEditor(s); } };
 $("btnPlaySeg").onclick = () => { const s = currentSeg(); if (s) player.playSegment(s.start_s, s.end_s); };
 $('btnLoopSeg').onclick = () => {
   const s = currentSeg(); if (!s) return;
@@ -449,16 +461,15 @@ $('btnLoopSeg').onclick = () => {
 $("btnDelSeg").onclick = () => { const s = currentSeg(); if (!s) return;
   if (!confirm("删除该段落？")) return;
   player.clearRange();
-  cur.segments = cur.segments.filter(x => x.uid !== s.uid); selId = null;
+  cur.segments = cur.segments.filter(x => x.uid !== s.uid); selId = cur.segments[0]?.uid ?? null;
   markDirty(); drawTimeline(); renderSegRows(); renderEditor(); };
 for (const id of ["modVisual","modTextual","modAuditory"]) $(id).onchange = () => {
   const s = currentSeg(); if (!s) return;
   s.modalities = [["modVisual","visual"],["modTextual","textual"],["modAuditory","auditory"]]
     .filter(([i]) => $(i).checked).map(([,m]) => m);
-  s.edited = true; markDirty();
+  s.edited = true; s.needs_review = false; markDirty();
 };
-$("edReview").onchange = e => { const s = currentSeg(); if (s) { s.needs_review = e.target.checked; s.edited = true; markDirty(); renderSegRows(); } };
-$("edRationale").oninput = e => { const s = currentSeg(); if (s) { s.rationale = e.target.value; s.edited = true; markDirty(); } };
+$("edRationale").oninput = e => { const s = currentSeg(); if (s) { s.rationale = e.target.value; s.edited = true; s.needs_review = false; markDirty(); renderSegRows(); } };
 
 function renderSegRows() {
   const tb = $("segRows"); tb.innerHTML = "";
@@ -469,8 +480,8 @@ function renderSegRows() {
     if (s.uid === selId) tr.className = "cur";
     const chips = s.labels.map(c => `<span class="lchip" style="background:${LABEL_COLOR[c]}">${c}</span>`).join("") || `<span class="badge warn">未选标签</span>`;
     const src = s.origin === "machine" ? `<span class="badge src">机器</span>` : `<span class="badge">人工</span>`;
-    const marks = [s.needs_review ? `<span class="badge warn">待复核</span>` : "",
-                   s.edited && s.origin === "machine" ? `<span class="badge">已改</span>` : ""].join(" ");
+    const marks = !s.rationale?.trim() || !s.labels.length || !s.modalities.length || s.needs_review
+      ? '<span class="badge warn">待填写</span>' : '<span class="badge">已填写</span>';
     tr.innerHTML = `<td>${i+1}</td><td>${fmt(s.start_s)}</td><td>${fmt(s.end_s)}</td><td>${chips}</td><td>${src}</td><td>${marks}</td>`;
     tr.onclick = () => { selectSeg(s.uid); player.seek(s.start_s); };
     tb.appendChild(tr);
@@ -516,7 +527,27 @@ function renderMachineSuggestions() {
   if (!suggestions.length) box.textContent = '暂无机器候选。这不代表没有风险，请完整查看视频并补标。';
   $('jumpReview').textContent = '查看机器待检查区间（' + (cur?.task.review_items || []).length + ' 项）';
 }
-$('jumpReview').onclick = () => $('reviewPanel').scrollIntoView({behavior:'smooth',block:'center'});
+function showReference(id) {
+  document.querySelectorAll('.referenceBody').forEach(el => el.hidden = el.id !== id);
+  document.querySelectorAll('[data-panel]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.panel === id)));
+}
+document.querySelectorAll('[data-panel]').forEach(el => el.onclick = () => showReference(el.dataset.panel));
+$('jumpReview').onclick = () => showReference('reviewPanel');
+function renderSelectedMachine(segment) {
+  const box = $('selectedMachineReason'); box.replaceChildren();
+  const exact = cur.task.segments.find(s => s.segment_id === segment.segment_id);
+  const suggestions = exact ? [exact] : cur.task.segments.filter(s => s.start_s < segment.end_s && s.end_s > segment.start_s);
+  for (const suggestion of suggestions) {
+    const card = document.createElement('article');
+    const title = document.createElement('h4'); title.textContent = fmt(suggestion.start_s) + '–' + fmt(suggestion.end_s);
+    const labels = document.createElement('p'); labels.className = 'hint'; labels.textContent = (suggestion.labels || []).map(c => c+' '+(LABEL_NAME[c] || '')).join(' / ');
+    const reason = document.createElement('p'); reason.className = 'machineRationale';
+    reason.textContent = suggestion.rationale || (suggestion.rationales || []).join('；') || '机器未提供理由。';
+    card.append(title, labels, reason); box.appendChild(card);
+  }
+  if (!suggestions.length) box.textContent = '这是人工新增片段，暂无重叠的机器建议。';
+  else if (!exact) box.prepend(document.createTextNode('以下为与当前区间重叠的机器建议：'));
+}
 
 /* ---------------- 转写 ---------------- */
 let TR = null;
@@ -535,12 +566,8 @@ async function loadTranscript(vid) {
       el.onclick = () => player.seek(TR[+el.dataset.i].start));
   } catch { /* 无转写不影响标注 */ }
 }
-$("btnToggleTr").onclick = () => {
-  const el = $("transcript");
-  el.style.display = el.style.display === "block" ? "none" : "block";
-};
 function highlightTranscript() {
-  if (!TR || $("transcript").style.display !== "block") return;
+  if (!TR || $('transcriptPanel').hidden) return;
   const t = V.currentTime;
   $("transcript").querySelectorAll(".tline").forEach(el => {
     const s = TR[+el.dataset.i];
@@ -565,7 +592,6 @@ $('wholeVideo').onchange = e => {
   cur.whole_video_reviewed = e.target.checked; markDirty(); validate();
 };
 $('adjudicationNote').oninput = e => { if (cur) { cur.adjudication_note = e.target.value; markDirty(); } };
-$('edVerification').oninput = e => { const s = currentSeg(); if (s) { s.verification_note=e.target.value; s.edited=true; markDirty(); } };
 
 function validate() {
   if (!cur) return;
@@ -580,14 +606,14 @@ function validate() {
   if (cur.status === "no_risk" && cur.segments.length) problems.push("「无风险」但仍有段落，请删除或改状态");
   if (cur.status === "done" && !cur.segments.length) problems.push("「已完成」且无任何段落 —— 若确无风险内容请选「确认无风险内容」");
   if (['done','no_risk'].includes(cur.status) && !cur.whole_video_reviewed) problems.push('完成前请确认全片检查');
-  if (['done','no_risk'].includes(cur.status) && (cur.segments.some(s => s.needs_review) || Object.values(cur.review_decisions).includes('unresolved'))) problems.push('仍有疑点，请选需专家复核');
-  if (cur.status !== 'in_progress' && cur.task.review_items.some(r => !cur.review_decisions[r.review_id])) problems.push('请处理全部机器待检查区间');
-  $("vCheck").textContent = problems.length ? "⚠ " + problems.join("；") : "";
+  if (cur.segments.some(s => s.needs_review)) problems.push('旧草稿中有未核实片段：请核实后修改理由，依据不成立就删除');
+
+  $("vCheck").textContent = problems.length ? "⚠ " + (problems.slice(0,2).join("；") + (problems.length > 2 ? `；另 ${problems.length-2} 项待填写` : "")) : "";
   $("vCheck").style.color = problems.length ? "#ffb3b3" : "";
 }
 
 function recordForSave() {
-  return {video_id:cur.task.video_id, task_version:cur.task.task_version, status:cur.status, note:cur.note,
+  return {review_workflow:'segments_only', video_id:cur.task.video_id, task_version:cur.task.task_version, status:cur.status, note:cur.note,
     review_decisions:cur.review_decisions, whole_video_reviewed:cur.whole_video_reviewed,
     ...(isExpert ? {source_signatures:cur.source_signatures, adjudication_note:cur.adjudication_note} : {}),
     segments:[...cur.segments].sort((a,b) => a.start_s-b.start_s).map(s => {
@@ -619,13 +645,8 @@ function renderReviewQueue() {
     kindText.candidate_unresolved_or_displaced='候选可能错位或未落实，需补查';
     description.textContent=' '+(kindText[item.kind] || '待检查区间')+' '+(item.labels || []).join('/')+' ';
     description.title=item.reason || item.evidence || '';
-    const select=document.createElement('select');
-    for (const [value,text] of [['','待处理'],['checked','已查看'],['added','已补标'],['rejected','确认不成立'],['unresolved','仍存疑，交专家']]) {
-      const option=document.createElement('option'); option.value=value; option.textContent=text; select.appendChild(option);
-    }
-    select.value=cur.review_decisions[item.review_id] || '';
-    select.onchange=()=> { if(select.value)cur.review_decisions[item.review_id]=select.value; else delete cur.review_decisions[item.review_id]; markDirty(); validate(); };
-    row.append(jump,description,select);box.appendChild(row);
+    const reason=document.createElement('p'); reason.className='hint'; reason.textContent=item.reason || item.evidence || '';
+    row.append(jump,description,reason);box.appendChild(row);
   }
   if (!box.children.length) box.textContent='无额外机器候选；仍须全片检查漏报。';
 }
@@ -645,7 +666,7 @@ function renderExpert(context) {
       cur.segments=structuredClone(source.segments).map(s=>({...s,uid:uidSeq++}));
       cur.status='in_progress';cur.whole_video_reviewed=false;
       document.querySelector('input[name=vstatus][value=in_progress]').checked=true;$('wholeVideo').checked=false;
-      selId=null;markDirty();renderSegRows();renderEditor();drawTimeline();
+      selId=cur.segments[0]?.uid ?? null;markDirty();renderSegRows();renderEditor();drawTimeline();
     };
     card.append(heading,note,button);
     for (const segment of source?.segments || []) {
@@ -713,4 +734,6 @@ document.onkeydown = e => {
   if (actions[e.key]) { e.preventDefault(); actions[e.key](); }
 };
 
+$('btnSave').onclick = () => saveNow();
+window.addEventListener('resize', drawTimeline);
 boot().catch(e => setSaveState('初始化失败：'+e.message, true));
