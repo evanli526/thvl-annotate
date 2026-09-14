@@ -16,7 +16,7 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
-from contracts import FINAL_STATUSES, annotation_signature, compare_annotations, validate_record
+from contracts import FINAL_STATUSES, annotation_signature, compare_annotations, validate_record, validate_human_source
 from common import media_identity, read_json, valid_id, write_json
 
 HERE = str(Path(__file__).resolve().parent)
@@ -94,9 +94,7 @@ def save_annotation(who, record, expected_revision, annotators=("A1","A2"), expe
                 raise ConflictError("human sources changed; reload expert comparison")
             if record["status"] in ("done","no_risk"):
                 for source in context["annotations"].values():
-                    if not source or source.get("status") not in FINAL_STATUSES:
-                        raise ValueError("both annotators must submit before expert completion")
-                    validate_record(source,task)
+                    validate_human_source(source,task)
                 if not str(record.get("adjudication_note","")).strip():
                     raise ValueError("expert completion requires an adjudication note")
         result = {**validated, "annotator":who, "role":"expert" if expert else "annotator",

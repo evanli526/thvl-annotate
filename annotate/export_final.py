@@ -3,7 +3,7 @@ import argparse
 import json
 from pathlib import Path
 
-from contracts import FINAL_STATUSES, annotation_signature, validate_record
+from contracts import FINAL_STATUSES, annotation_signature, validate_record, validate_human_source
 from common import TAXONOMY_VERSION, read_json, valid_id, write_json, write_jsonl
 from taxonomy_prompt import LABEL_CODES, MODALITY_ORDER
 
@@ -20,8 +20,7 @@ def collect_final(tasks, annotations_dir, annotators=("A1", "A2"), expert_id="EX
         expert = read_json(root/expert_id/f"{vid}.json")
         try:
             for who, source in sources.items():
-                if not isinstance(source,dict) or source.get("status") not in FINAL_STATUSES:
-                    raise ValueError(f"{who} not submitted")
+                validate_human_source(source, task)
                 if source.get("annotator") != who or source.get("role") != "annotator":
                     raise ValueError(f"{who} source identity not verified")
                 validate_record(source, task)
@@ -40,6 +39,7 @@ def collect_final(tasks, annotations_dir, annotators=("A1", "A2"), expert_id="EX
                           "status": expert["status"], "segments": expert["segments"],
                           "expert": expert_id, "expert_signature": annotation_signature(expert),
                           "source_signatures": signatures, "adjudication_note": expert["adjudication_note"],
+                          "source_workflows": {who:r.get("review_workflow", "legacy") for who,r in sources.items()},
                           "review_decisions": expert.get("review_decisions", {}),
                           "provenance": task.get("provenance", {})})
         except (ValueError, TypeError, KeyError) as exc:

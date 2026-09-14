@@ -18,9 +18,9 @@ def validate_record(record, task, expert=False):
         raise ValueError("task version changed; reload and reconcile annotations")
     status = record.get("status")
     workflow = record.get("review_workflow", "legacy")
-    if workflow not in ("legacy", "segments_only"):
+    if workflow not in ("legacy", "segments_only", "autosave"):
         raise ValueError("unknown review workflow")
-    simplified = workflow == "segments_only"
+    simplified = workflow in ("segments_only", "autosave")
     if status not in FINAL_STATUSES | {"in_progress"}:
         raise ValueError("invalid video status")
     complete = status in FINAL_STATUSES
@@ -78,6 +78,20 @@ def validate_record(record, task, expert=False):
 
 def annotation_signature(record):
     return digest(record) if record is not None else None
+
+
+def validate_human_source(record, task):
+    """Autosaved inputs are drafts, not a claim of whole-video human review.
+
+    Experts may adjudicate saved drafts; their own final record still needs all
+    segment fields and explicit whole-video review. Legacy submissions retain
+    their original completion requirements.
+    """
+    if not isinstance(record, dict):
+        raise ValueError("both annotators must save a record before expert completion")
+    if record.get("review_workflow") != "autosave" and record.get("status") not in FINAL_STATUSES:
+        raise ValueError("both annotators must submit before expert completion")
+    return validate_record(record, task)
 
 
 def compare_annotations(first, second):

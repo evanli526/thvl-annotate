@@ -5,14 +5,11 @@
   <h1>THVL 人工标注台</h1>
   <button class="who" id="whoBadge" title="切换标注工作区">?</button>
   <span id="workspaceHint" class="hint">独立标注工作区</span>
-  <div id="progressWrap">
-    <div id="progressBar"><i></i></div>
-    <div id="progressText">加载中…</div>
-  </div>
   <span id="saveState"></span>
   <span style="flex:1"></span>
   <button id="btnRef">标签速查</button>
   <button id="btnKeys">快捷键</button>
+  <button id="btnSave">保存</button>
   <button id="btnBackup">备份本视频</button>
 </header>
 
@@ -23,10 +20,8 @@
       <input id="search" type="search" placeholder="搜索视频编号…">
       <div class="filterRow">
         <button data-f="all" class="on">全部</button>
-        <button data-f="todo">未完成</button>
-        <button data-f="done">已完成</button>
-        <button data-f="needs_expert">待复核</button>
-        <button data-f="no_risk">无风险</button>
+        <button data-f="todo">未保存</button>
+        <button data-f="done">已保存</button>
       </div>
     </div>
     <div id="videoList"></div>
@@ -66,17 +61,17 @@
       </div>
 
 
-  <section id="referenceDeck" class="panel">
+  <section id="referenceDeck" class="panel collapsed">
     <nav class="referenceTabs" aria-label="参考资料">
-      <button data-panel="machinePanel" aria-pressed="true">机器候选 <span id="machineCount">0</span></button>
+      <button data-panel="machinePanel" aria-pressed="false">机器候选 <span id="machineCount">0</span></button>
       <button data-panel="transcriptPanel" aria-pressed="false">转写</button>
       <button data-panel="reviewPanel" aria-pressed="false">补查提示</button>
       <button data-panel="expertPanel" id="expertTab" aria-pressed="false" hidden>两人对比</button>
     </nav>
-    <div class="referenceBody" id="machinePanel"><div id="machineSuggestions"></div><button id="jumpReview">查看补查提示</button></div>
+    <div class="referenceBody" id="machinePanel" hidden><div id="machineSuggestions"></div><button id="jumpReview">查看补查提示</button></div>
     <div class="referenceBody" id="transcriptPanel" hidden><p id="transcriptCoverage" class="hint"></p><div id="transcript"></div></div>
     <div class="referenceBody" id="reviewPanel" hidden><p class="hint">机器遗漏和不确定区间仅供定位。看视频核实，成立就补标，不成立就不保留；无需逐项填写处理状态。</p><div id="reviewQueue"></div></div>
-    <div class="referenceBody" id="expertPanel" hidden><div id="expertSources"></div></div>
+    <div class="referenceBody" id="expertPanel" hidden><div id="expertSources"></div><div id="expertNote"><label for="adjudicationNote">裁决说明</label><input id="adjudicationNote" type="text" placeholder="简述两份结果的取舍"><button id="confirmExpert">保存最终裁决</button><span id="expertResult" class="hint"></span></div></div>
   </section>
 </section>
 <section id="detailColumn" aria-label="片段标注">
@@ -98,10 +93,10 @@
         <label class="ck"><input type="checkbox" id="modAuditory">环境音</label>
       </fieldset>
       <label for="edRationale" class="fieldTitle">你的理由 <span class="hint">一句简短说明</span></label>
-      <textarea id="edRationale" rows="3" placeholder="例如：男子连续用拳击打另一人的头部。请根据视频自行填写。"></textarea>
+      <textarea id="edRationale" rows="2" placeholder="例如：男子连续用拳击打另一人的头部。请根据视频自行填写。"></textarea>
     </div>
     <aside id="selectedMachine" aria-label="机器理由参考">
-      <h3>机器参考 <span class="badge src">只读</span></h3><p class="hint">原文供核对，不会填入你的理由。</p>
+      <h3>机器理由 <span class="hint">只读参考 · 不会填入人工框</span></h3>
       <div id="selectedMachineReason"></div>
     </aside>
   </div>
@@ -109,17 +104,7 @@
     <div class="segmentScroll"><table class="seglist"><thead><tr><th>#</th><th>起点</th><th>终点</th><th>标签</th><th>来源</th><th>填写</th></tr></thead><tbody id="segRows"></tbody></table></div>
   </section>
 </section></div>
-<footer id="vlevel" class="panel">
-  <div class="completionRow"><strong>视频进度</strong>
-    <label class="ck"><input type="radio" name="vstatus" value="in_progress">进行中</label>
-    <label class="ck"><input type="radio" name="vstatus" value="done">已完成</label>
-    <label class="ck"><input type="radio" name="vstatus" value="no_risk">无风险片段</label>
-    <label class="ck"><input type="radio" name="vstatus" value="needs_expert">视频需复核</label>
-    <label class="ck whole"><input type="checkbox" id="wholeVideo">已完整观看并检查漏报</label>
-    <button id="btnSave" class="primary">保存</button>
-  </div>
-  <div class="completionNotes"><input type="text" id="vnote" placeholder="可选备注：如视频无法播放、音轨缺失…"><label id="expertNote" hidden>裁决说明 <input type="text" id="adjudicationNote" placeholder="简述两份结果的取舍"></label><div id="vCheck" role="status"></div></div>
-</footer>
+
 </section></div>
 <div class="modal" id="modalRef"><div class="box">
   <button class="close" data-close aria-label="关闭弹窗">✕</button>

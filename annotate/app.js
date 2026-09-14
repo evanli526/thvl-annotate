@@ -111,14 +111,14 @@ async function boot() {
   EXPERT_ID = cfg.expert_id; isExpert = ANNOTATOR === EXPERT_ID;
   if (![...cfg.annotators, EXPERT_ID].includes(ANNOTATOR)) { setSaveState('未知标注者代号，请使用分配的链接', true); return; }
   $('workspaceHint').textContent = isExpert ? '专家裁决工作区' : '独立标注 · 仅保存到你的工作区';
-  $('expertTab').hidden = !isExpert; $('expertNote').hidden = !isExpert;
+  $('expertTab').hidden = !isExpert;
   const resp = await fetch("tasks.json");
-  if (!resp.ok) { $("progressText").textContent = "缺少 tasks.json，请先运行 build_tasks.py"; return; }
+  if (!resp.ok) { setSaveState("缺少任务包，请重新获取仓库", true); return; }
   TASKS = await resp.json();
   await refreshProgress();
   const last = browserStorage.getItem("thvl_last_" + ANNOTATOR);
   const first = TASKS.find(t => t.video_id === last) ||
-                TASKS.find(t => !["done","no_risk"].includes((PROGRESS[t.video_id]||{}).status)) || TASKS[0];
+                TASKS.find(t => !PROGRESS[t.video_id]) || TASKS[0];
   renderList();
   if (first) openVideo(first.video_id);
 }
@@ -126,9 +126,7 @@ async function boot() {
 async function refreshProgress() {
   try { PROGRESS = await (await fetch("/api/progress?annotator=" + encodeURIComponent(ANNOTATOR))).json(); }
   catch { PROGRESS = PROGRESS || {}; }
-  const done = TASKS.filter(t => ["done","no_risk"].includes((PROGRESS[t.video_id]||{}).status)).length;
-  $("progressBar").firstElementChild.style.width = (TASKS.length ? 100*done/TASKS.length : 0) + "%";
-  $("progressText").textContent = `已完成 ${done} / ${TASKS.length}`;
+
 }
 
 /* ---------------- 视频列表 ---------------- */
@@ -139,16 +137,16 @@ function renderList() {
     const p = PROGRESS[t.video_id];
     const st = p ? p.status : null;
     if (SEARCH && !t.video_id.toLowerCase().includes(SEARCH)) continue;
-    if (FILTER === "todo" && (st === "done" || st === "no_risk")) continue;
-    if (["done","needs_expert","no_risk"].includes(FILTER) && st !== FILTER) continue;
+    if (FILTER === "todo" && p) continue;
+    if (FILTER === "done" && !p) continue;
     const div = document.createElement("div");
     div.className = "vitem" + (cur && cur.task.video_id === t.video_id ? " cur" : "");
     div.dataset.vid = t.video_id;
-    const chip = st ? `<span class="chip st-${st}">${STATUS_TEXT[st]||st}</span>` : `<span class="chip st-none">未开始</span>`;
+    const chip = st ? `<span class="chip st-${st}">已保存</span>` : `<span class="chip st-none">未开始</span>`;
     div.innerHTML = `<div class="vid">${t.video_id}</div>
       <div class="meta">${chip}<span>${fmt(t.duration_s)}</span><span>${p ? p.segments + " 段" : (t.segments.length ? "机标 " + t.segments.length + " 段" : "")}</span></div>`;
     div.tabIndex = 0; div.setAttribute('role', 'button');
-    div.setAttribute('aria-label', t.video_id + '，' + (STATUS_TEXT[st] || '未开始'));
+    div.setAttribute('aria-label', t.video_id + '，' + (p ? '已保存' : '未保存'));
     div.setAttribute('aria-current', cur?.task.video_id === t.video_id ? 'true' : 'false');
     div.onclick = () => openVideo(t.video_id);
     div.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); openVideo(t.video_id); } };
@@ -164,10 +162,10 @@ document.querySelectorAll(".filterRow button").forEach(b => b.onclick = () => {
 
 /* ---------------- 打开视频 ---------------- */
 async function openVideo(vid) {
-  if (loading) return;
+  if (loading || cur?.task.video_id === vid) return;
   loading = true;
   const sequence = ++openSequence;
-  if (cur && !(await saver.flush(cur.task.video_id))) { loading = false; return; }
+  if (cur && !(await flushBeforeSwitch())) { loading = false; return; }
   const task = TASKS.find(t => t.video_id === vid);
   if (!task) { loading = false; return; }
   let saved = null, context = null;
@@ -183,7 +181,7 @@ async function openVideo(vid) {
   } catch (e) { loading = false; setSaveState(e.message, true); return; }
   if (sequence !== openSequence) { loading = false; return; }
   // Editing can continue while the next video's read request is pending.
-  if (cur && !(await saver.flush(cur.task.video_id))) { loading = false; return; }
+  if (cur && !(await flushBeforeSwitch())) { loading = false; return; }
   remember('thvl_last_' + ANNOTATOR, vid);
   const serverRevision = saved?.revision || 0;
   let recovered = false;
@@ -208,10 +206,8 @@ async function openVideo(vid) {
     }
   }
   saver.load(vid, serverRevision);
-  document.querySelector(`input[name=vstatus][value="${cur.status}"]`).checked = true;
-  $("vnote").value = cur.note;
-  $('wholeVideo').checked = cur.whole_video_reviewed;
-  $('adjudicationNote').value = cur.adjudication_note;
+  $('adjudicationNote').value = cur.adjudication_note; $('expertResult').textContent = '';
+  setSaveState(saved ? '已保存' : '修改后自动保存');
   $('machineState').dataset.machineStatus=task.machine_status; $('machineState').dataset.mediaStatus=task.media_status;
   $('machineState').textContent = `媒体：${task.media_status === 'ok' ? '可用' : (MACHINE_STATUS_TEXT[task.media_status] || '不可用')}；机器处理：${MACHINE_STATUS_TEXT[task.machine_status] || '状态待核查'}。机器未报区间仍需全片检查。`;
   selId = cur.segments[0]?.uid ?? null;
@@ -228,7 +224,7 @@ async function openVideo(vid) {
   $("zoomLabel").textContent = "全片";
   renderSegRows(); renderEditor(); drawTimeline();
   renderList();
-  renderReviewQueue(); renderMachineSuggestions(); renderExpert(context); showReference(isExpert ? 'expertPanel' : 'machinePanel');
+  renderReviewQueue(); renderMachineSuggestions(); renderExpert(context); showReference(null);
   loadTranscript(vid);
   loading = false;
   if (recovered) markDirty();
@@ -528,10 +524,11 @@ function renderMachineSuggestions() {
   $('jumpReview').textContent = '查看机器待检查区间（' + (cur?.task.review_items || []).length + ' 项）';
 }
 function showReference(id) {
+  $('referenceDeck').classList.toggle('collapsed', !id);
   document.querySelectorAll('.referenceBody').forEach(el => el.hidden = el.id !== id);
   document.querySelectorAll('[data-panel]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.panel === id)));
 }
-document.querySelectorAll('[data-panel]').forEach(el => el.onclick = () => showReference(el.dataset.panel));
+document.querySelectorAll('[data-panel]').forEach(el => el.onclick = () => showReference(el.getAttribute('aria-pressed') === 'true' ? null : el.dataset.panel));
 $('jumpReview').onclick = () => showReference('reviewPanel');
 function renderSelectedMachine(segment) {
   const box = $('selectedMachineReason'); box.replaceChildren();
@@ -575,45 +572,28 @@ function highlightTranscript() {
   });
 }
 
-/* ---------------- 视频级结论与保存 ---------------- */
-document.querySelectorAll("input[name=vstatus]").forEach(r => r.onchange = () => {
-  if (!cur) return;
-  cur.status = document.querySelector("input[name=vstatus]:checked").value;
-  markDirty(); validate();
-});
-$("vnote").oninput = e => { if (cur) { cur.note = e.target.value; markDirty(); } };
-$('wholeVideo').onchange = e => {
-  if (!cur) return;
-  if (e.target.checked && (!V.videoWidth || !V.videoHeight || V.error)) {
-    e.target.checked = false;
-    alert('尚未成功显示视频画面，不能确认全片检查。请先解决播放问题。');
-    return;
-  }
-  cur.whole_video_reviewed = e.target.checked; markDirty(); validate();
-};
+/* ---------------- 自动保存；切换之前等待当前修改落盘 ---------------- */
 $('adjudicationNote').oninput = e => { if (cur) { cur.adjudication_note = e.target.value; markDirty(); } };
-
 function validate() {
-  if (!cur) return;
-  const problems = [];
-  cur.segments.forEach((s, i) => {
-    if (!s.labels.length) problems.push(`第 ${i+1} 段未选标签`);
-    if (!s.modalities.length) problems.push(`第 ${i+1} 段未选模态`);
-    if (!(s.end_s > s.start_s)) problems.push(`第 ${i+1} 段起止无效`);
-    if (s.start_s < 0 || s.end_s > cur.task.duration_s) problems.push(`第 ${i+1} 段超出视频`);
-    if (!s.rationale?.trim()) problems.push(`第 ${i+1} 段缺少理由`);
-  });
-  if (cur.status === "no_risk" && cur.segments.length) problems.push("「无风险」但仍有段落，请删除或改状态");
-  if (cur.status === "done" && !cur.segments.length) problems.push("「已完成」且无任何段落 —— 若确无风险内容请选「确认无风险内容」");
-  if (['done','no_risk'].includes(cur.status) && !cur.whole_video_reviewed) problems.push('完成前请确认全片检查');
-  if (cur.segments.some(s => s.needs_review)) problems.push('旧草稿中有未核实片段：请核实后修改理由，依据不成立就删除');
-
-  $("vCheck").textContent = problems.length ? "⚠ " + (problems.slice(0,2).join("；") + (problems.length > 2 ? `；另 ${problems.length-2} 项待填写` : "")) : "";
-  $("vCheck").style.color = problems.length ? "#ffb3b3" : "";
+  // Drafts may be incomplete. Field-level marks guide editing without blocking saves.
 }
+async function flushBeforeSwitch() {
+  const invalid = document.querySelector('#editor [aria-invalid="true"]');
+  if (invalid) { invalid.focus(); setSaveState('时间格式无效，请改正后再切换；其余改动已保留', true); return false; }
+  return saveNow();
+}
+$('confirmExpert').onclick = async () => {
+  if (!cur || !isExpert) return;
+  if (!cur.adjudication_note.trim()) { $('expertResult').textContent='请先填写裁决说明'; return; }
+  if (!V.videoWidth || !V.videoHeight || V.error) { $('expertResult').textContent='请先解决播放问题并完整复看视频'; return; }
+  if (!confirm('确认已经完整复看视频、检查两份人工记录，并完成本视频的最终裁决？')) return;
+  cur.status = cur.segments.length ? 'done' : 'no_risk'; cur.whole_video_reviewed = true;
+  saver.mark(cur.task.video_id, recordForSave());
+  $('expertResult').textContent = await saveNow() ? '最终裁决已保存' : '尚未通过校验，请检查保存提示';
+};
 
 function recordForSave() {
-  return {review_workflow:'segments_only', video_id:cur.task.video_id, task_version:cur.task.task_version, status:cur.status, note:cur.note,
+  return {review_workflow:'autosave', video_id:cur.task.video_id, task_version:cur.task.task_version, status:cur.status, note:cur.note,
     review_decisions:cur.review_decisions, whole_video_reviewed:cur.whole_video_reviewed,
     ...(isExpert ? {source_signatures:cur.source_signatures, adjudication_note:cur.adjudication_note} : {}),
     segments:[...cur.segments].sort((a,b) => a.start_s-b.start_s).map(s => {
@@ -625,9 +605,10 @@ function recordForSave() {
 
 function markDirty() {
   player.clearRange();
-  if (cur) saver.mark(cur.task.video_id, recordForSave());
+  if (cur) { cur.status='in_progress'; cur.whole_video_reviewed=false; $('expertResult').textContent=''; saver.mark(cur.task.video_id, recordForSave()); }
 }
-async function saveNow() {
+async function saveNow(checkpoint = false) {
+  if (checkpoint && cur) saver.mark(cur.task.video_id, recordForSave());
   return cur ? saver.flush(cur.task.video_id) : true;
 }
 function setSaveState(txt, bad) { $("saveState").textContent = txt; $("saveState").className = bad ? "bad" : ""; }
@@ -658,14 +639,13 @@ function renderExpert(context) {
   const segmentText=s => s ? `${fmt(s.start_s)}–${fmt(s.end_s)} ${(s.labels || []).map(c => c+' '+(LABEL_NAME[c] || '')).join(' / ')}\n${s.rationale || ''}${s.needs_review ? ' ⚠ 待复核' : ''}` : '未标出对应片段';
   for (const [who,source] of Object.entries(context.annotations)) {
     const card=document.createElement('div');card.className='sourceCard';
-    const heading=document.createElement('h3'); heading.textContent=who+'：'+(STATUS_TEXT[source?.status] || '尚未提交');
+    const heading=document.createElement('h3'); heading.textContent=who+'：'+(source ? '已保存记录' : '暂无记录');
     const note=document.createElement('p');note.textContent=source?.note || '无视频备注';
     const button=document.createElement('button');button.textContent='以 '+who+' 的片段作为本次裁决起稿';button.disabled=!source;
     button.onclick=()=> {
       if (!confirm('将当前专家片段替换为 '+who+' 的片段作为起稿？两份人工原件均保留。')) return;
       cur.segments=structuredClone(source.segments).map(s=>({...s,uid:uidSeq++}));
       cur.status='in_progress';cur.whole_video_reviewed=false;
-      document.querySelector('input[name=vstatus][value=in_progress]').checked=true;$('wholeVideo').checked=false;
       selId=cur.segments[0]?.uid ?? null;markDirty();renderSegRows();renderEditor();drawTimeline();
     };
     card.append(heading,note,button);
@@ -715,7 +695,7 @@ window.onclick = e => { if (e.target.classList.contains("modal")) e.target.style
 document.onkeydown = e => {
   const active = document.activeElement;
   const typing = /INPUT|TEXTAREA|SELECT/.test(active.tagName) || active.isContentEditable;
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveNow(); return; }
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveNow(true); return; }
   if (e.key === 'Escape') { document.querySelectorAll('.modal').forEach(m => m.style.display = 'none'); player.clearRange(); return; }
   if (typing || !cur || e.ctrlKey || e.metaKey || e.altKey || [...document.querySelectorAll('.modal')].some(m => m.style.display === 'block')) return;
   if (e.key === ' ' && /BUTTON|A|VIDEO/.test(active.tagName)) return;
@@ -734,6 +714,6 @@ document.onkeydown = e => {
   if (actions[e.key]) { e.preventDefault(); actions[e.key](); }
 };
 
-$('btnSave').onclick = () => saveNow();
+$('btnSave').onclick = () => saveNow(true);
 window.addEventListener('resize', drawTimeline);
 boot().catch(e => setSaveState('初始化失败：'+e.message, true));
