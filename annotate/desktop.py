@@ -18,7 +18,7 @@ RELEASE=Path(__file__).resolve().parent/'releases/quality_review_20260914'
 
 
 def prepare(release,workspace):
-    meta=json.loads((release/'release.json').read_text())
+    meta=json.loads((release/'release.json').read_text(encoding='utf-8'))
     payload={}
     for name in ('tasks.json.gz','transcripts.json.gz'):
         raw=(release/name).read_bytes()
@@ -26,7 +26,7 @@ def prepare(release,workspace):
             raise ValueError('标注包校验失败，请重新获取仓库：'+name)
         payload[name]=json.loads(gzip.decompress(raw))
     tasks=payload['tasks.json.gz'];current=workspace/'tasks.json'
-    if current.exists() and json.loads(current.read_text())!=tasks:
+    if current.exists() and json.loads(current.read_text(encoding='utf-8'))!=tasks:
         raise ValueError('此工作目录属于不同任务版本，请换用 --workspace，勿覆盖已有结果')
     if not current.exists():write_json(current,tasks)
     for vid,data in payload['transcripts.json.gz'].items():
