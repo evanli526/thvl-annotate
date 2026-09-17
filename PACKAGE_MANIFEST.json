@@ -11,7 +11,7 @@
     "annotate/desktop.py": "b00cddc2ad70f63676f4fdddd7a6e824eaff733744c9689af813f41d95b55288",
     "annotate/editor.js": "773aff059a656e577d3239dc9245c0a4a7e9ad3daf276e502fb5a5b8d5a6748e",
     "annotate/export_final.py": "8ef33f882624c5aef1afd1dfbc81b57676e89fb4acd342e01498fd1172b1e425",
-    "annotate/instructions.md": "f0ec763de36f248961c9cd118082cce53a2dc4d966ea1a087b5cc63d2b55e5cf",
+    "annotate/instructions.md": "081bd44447658e3de683ead183f0fb61dda644d0b4200dc52b11211cc7d67c28",
     "annotate/player.js": "5abc6c9d48995cc18e3953587c4efda5c258dcecb60032339d614dde783db207",
     "annotate/releases/quality_review_20260914/README.md": "007b28ec2055cf206c5786fd2fc3bec52ce1eab9375bd761dcc36b72e6336ae7",
     "annotate/releases/quality_review_20260914/release.json": "5f201d10b14bf42c259d0dfefa55449213ce8da0a78d8a9c30252dea4ad198a6",
@@ -19,7 +19,7 @@
     "annotate/releases/quality_review_20260914/transcripts.json.gz": "39213755b9ef64a1364174b83d85bdcfd61ddca5959232137cb98720ed5af936",
     "annotate/serve.py": "c4efa9b3db2ea4b9019c3d571a1ca8e464dbd6945b0731e39502026c7e3596b6",
     "annotate/taxonomy_prompt.py": "df8fba8d2d2ec726dac76245597bca206fb925a6adabd2b09771d6059a18abcd",
-    "annotate/开始标注.md": "b5313be9d13f336109c063f36a0b07511389221646fa409ea80ccf13a19d3236",
+    "annotate/开始标注.md": "0155ff56152a43c8f7edefda2690b7218070b9e15f228dbf7975532280416388",
     "annotate.py": "4ba4fa25d864a2d828ed21a9c57cb87e212b341eb63e4667bd4dfa4da8838812"
   },
   "release": "quality_review_20260914",
